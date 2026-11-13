@@ -3,14 +3,18 @@ import AudioToolbox
 import CoreAudio
 import Foundation
 
-/// Number of frequency bands the analyzer produces (40 Hz – 16 kHz, log spaced).
-let spectrumBandCount = 24
+/// Center frequencies of the standard 10-band (octave) graphic equalizer.
+let equalizerBands: [Double] = [31, 62, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000]
+let equalizerBandLabels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
 
 /// Live frequency levels of the selected music app, captured with a Core Audio process tap
 /// (macOS 14.2+, "System Audio Recording" permission). Empty `levels` means no live audio.
 @MainActor
 final class AudioSpectrum: ObservableObject {
     @Published private(set) var levels: [Float] = []
+    /// Peak-hold marker per band: jumps up with the level, holds briefly, then falls.
+    @Published private(set) var peaks: [Float] = []
+    private var peakHold: [Int] = []
     /// True while capturing but only receiving digital silence (usually: permission denied).
     @Published private(set) var isSilent = false
     @Published private(set) var failure: String?
@@ -47,6 +51,8 @@ final class AudioSpectrum: ObservableObject {
         capture = nil
         target = nil
         levels = []
+        peaks = []
+        peakHold = []
         isSilent = false
         silentFrames = 0
     }
@@ -60,7 +66,23 @@ final class AudioSpectrum: ObservableObject {
             silentFrames = 0
             isSilent = false
         }
+        if peaks.count != bands.count {
+            peaks = bands
+            peakHold = Array(repeating: 0, count: bands.count)
+        }
+        var nextPeaks = peaks
+        for index in bands.indices {
+            if bands[index] >= nextPeaks[index] {
+                nextPeaks[index] = bands[index]
+                peakHold[index] = 18 // ~0.6 s at 30 fps
+            } else if peakHold[index] > 0 {
+                peakHold[index] -= 1
+            } else {
+                nextPeaks[index] = max(bands[index], nextPeaks[index] - 0.015)
+            }
+        }
         levels = bands
+        peaks = nextPeaks
     }
 }
 
@@ -116,7 +138,7 @@ final class TapCapture {
             status = AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID)
             guard status == noErr else { throw TapError.os("criar o dispositivo de captura", status) }
 
-            let analyzer = SpectrumAnalyzer(sampleRate: format.mSampleRate, bands: spectrumBandCount)
+            let analyzer = SpectrumAnalyzer(sampleRate: format.mSampleRate, centers: equalizerBands)
             self.analyzer = analyzer
             let interleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
             let channels = max(1, Int(format.mChannelsPerFrame))
@@ -198,10 +220,11 @@ final class TapCapture {
     }
 }
 
-/// Mono FFT over a sliding window, folded into log-spaced bands normalized to 0...1.
+/// Mono FFT over a sliding window, folded into octave bands normalized to 0...1.
 /// Only touched from the tap's serial queue.
 final class SpectrumAnalyzer {
-    private let size = 2048
+    /// 4096 points keep the 31 Hz and 62 Hz bands apart (≈11.7 Hz per bin at 48 kHz).
+    private let size = 4096
     private let hop: Int
     private let fft: vDSP.FFT<DSPSplitComplex>
     private let window: [Float]
@@ -211,27 +234,22 @@ final class SpectrumAnalyzer {
     private var smoothed: [Float]
     private var peakDB: Float = -40
 
-    init(sampleRate: Double, bands: Int) {
+    init(sampleRate: Double, centers: [Double]) {
         hop = min(size, max(512, Int(sampleRate / 30)))
-        fft = vDSP.FFT(log2n: 11, radix: .radix2, ofType: DSPSplitComplex.self)!
+        fft = vDSP.FFT(log2n: 12, radix: .radix2, ofType: DSPSplitComplex.self)!
         window = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: size, isHalfWindow: false)
-        smoothed = [Float](repeating: 0, count: bands)
+        smoothed = [Float](repeating: 0, count: centers.count)
 
         let bins = size / 2
-        let nyquist = sampleRate / 2
-        var edges = (0...bands).map { index -> Int in
-            let frequency = 40 * pow(16_000 / 40, Double(index) / Double(bands))
-            return min(bins - 1, max(1, Int(frequency / nyquist * Double(bins))))
+        let binWidth = sampleRate / Double(size)
+        // Each band spans one octave around its center: center/√2 ..< center·√2.
+        bandRanges = centers.map { center in
+            let low = max(1, Int((center / 2.0.squareRoot() / binWidth).rounded()))
+            let high = min(bins, Int((center * 2.0.squareRoot() / binWidth).rounded()))
+            return low..<max(low + 1, high)
         }
-        for index in 1..<edges.count where edges[index] <= edges[index - 1] {
-            edges[index] = min(bins, edges[index - 1] + 1)
-        }
-        bandRanges = (0..<bands).map { edges[$0]..<max(edges[$0] + 1, edges[$0 + 1]) }
         // Music has less energy in high bands; lift them ~4.5 dB per octave above 1 kHz.
-        bandTilt = bandRanges.map { range in
-            let center = Double(range.lowerBound + range.upperBound) / 2 / Double(bins) * nyquist
-            return Float(4.5 * log2(max(center, 40) / 1000))
-        }
+        bandTilt = centers.map { Float(4.5 * log2($0 / 1000)) }
     }
 
     func consume(_ buffers: UnsafeMutableAudioBufferListPointer, interleaved: Bool, channels: Int) -> [Float]? {

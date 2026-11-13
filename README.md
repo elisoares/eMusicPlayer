@@ -16,7 +16,8 @@ A small macOS menu bar app that shows and controls what is playing in Spotify or
 - **Panel** (click the title in the menu bar): album artwork, title, artist and album,
   seek bar with times, shuffle, playback buttons, volume.
 - **Live spectrum:** the bars follow the music. MenuBarPlayer taps only the audio of the
-  selected app (Core Audio process tap, macOS 14.2+) and runs an FFT into 24 bands.
+  selected app (Core Audio process tap, macOS 14.2+) and runs an FFT into the 10 standard equalizer bands
+  (31 Hz – 16 kHz), each with a falling peak marker.
   macOS asks once for *Screen & System Audio Recording* permission.
 - **Appearance** (palette button at the top of the panel): accent color, button color and
   button style (Classic, Filled, Outline, Soft, Minimal).

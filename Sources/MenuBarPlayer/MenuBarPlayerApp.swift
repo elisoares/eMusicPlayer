@@ -162,37 +162,54 @@ struct ControlIcon: View {
 
 // MARK: - Visualizer
 
-/// Bars showing the live spectrum of the music. Without live audio they rest flat.
+/// The 10 standard equalizer bands (31 Hz – 16 kHz) of the live music, each with a
+/// peak marker that holds the recent maximum and then falls. Without live audio they rest flat.
 struct SpectrumBars: View {
     @ObservedObject var spectrum: AudioSpectrum
     let color: Color
-    var barCount = 6
-    var spacingRatio: CGFloat = 0.25
+    var spacingRatio: CGFloat = 0.3
+    var peakThickness: CGFloat = 2
+    var showsLabels = false
 
     var body: some View {
-        let levels = resampled(spectrum.levels)
-        GeometryReader { geo in
-            let spacing = geo.size.width / CGFloat(barCount) * spacingRatio
-            HStack(alignment: .bottom, spacing: spacing) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    let level = CGFloat(levels.isEmpty ? 0 : levels[index])
-                    RoundedRectangle(cornerRadius: min(2, geo.size.width / CGFloat(barCount) / 3))
-                        .fill(color.opacity(levels.isEmpty ? 0.45 : 0.55 + 0.45 * Double(level)))
-                        .frame(height: max(2, geo.size.height * (0.12 + 0.88 * level)))
+        let count = equalizerBands.count
+        let levels = spectrum.levels.count == count ? spectrum.levels : []
+        let peaks = spectrum.peaks.count == count ? spectrum.peaks : []
+        VStack(spacing: 3) {
+            GeometryReader { geo in
+                let slot = geo.size.width / CGFloat(count)
+                let barWidth = slot * (1 - spacingRatio)
+                let floor: CGFloat = 0.1
+                ZStack(alignment: .bottomLeading) {
+                    ForEach(0..<count, id: \.self) { index in
+                        let level = CGFloat(levels.isEmpty ? 0 : levels[index])
+                        let x = slot * CGFloat(index) + (slot - barWidth) / 2
+                        RoundedRectangle(cornerRadius: min(2, barWidth / 3))
+                            .fill(color.opacity(levels.isEmpty ? 0.45 : 0.55 + 0.45 * Double(level)))
+                            .frame(width: barWidth, height: max(2, geo.size.height * (floor + (1 - floor) * level)))
+                            .offset(x: x)
+                        if !peaks.isEmpty {
+                            let peak = CGFloat(peaks[index])
+                            let top = geo.size.height * (floor + (1 - floor) * peak)
+                            Rectangle()
+                                .fill(color)
+                                .frame(width: barWidth, height: peakThickness)
+                                .offset(x: x, y: -min(geo.size.height - peakThickness, top + peakThickness))
+                        }
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomLeading)
+            }
+            if showsLabels {
+                HStack(spacing: 0) {
+                    ForEach(equalizerBandLabels, id: \.self) { label in
+                        Text(label)
+                            .font(.system(size: 8, weight: .medium).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .bottom)
-        }
-    }
-
-    /// Averages the analyzer bands down (or repeats them up) to `barCount` bars.
-    private func resampled(_ bands: [Float]) -> [Float] {
-        guard !bands.isEmpty else { return [] }
-        return (0..<barCount).map { bar in
-            let start = bar * bands.count / barCount
-            let end = max(start + 1, (bar + 1) * bands.count / barCount)
-            let slice = bands[start..<min(end, bands.count)]
-            return slice.reduce(0, +) / Float(slice.count)
         }
     }
 }
@@ -217,8 +234,8 @@ struct StatusBarView: View {
         HStack(spacing: 6) {
             Button(action: onOpen) {
                 HStack(spacing: 6) {
-                    SpectrumBars(spectrum: player.spectrum, color: accent.color, barCount: 6)
-                        .frame(width: 26, height: 14)
+                    SpectrumBars(spectrum: player.spectrum, color: accent.color, spacingRatio: 0.25, peakThickness: 1)
+                        .frame(width: 40, height: 15)
                     if hasTrack, showTitle {
                         Text(shortTitle).lineLimit(1)
                     }
@@ -529,8 +546,8 @@ struct PlayerView: View {
     private var equalizer: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Equalizador").font(.caption.weight(.semibold))
-            SpectrumBars(spectrum: player.spectrum, color: accent.color, barCount: spectrumBandCount, spacingRatio: 0.3)
-                .frame(height: 44)
+            SpectrumBars(spectrum: player.spectrum, color: accent.color, showsLabels: true)
+                .frame(height: 70)
             SpectrumNote(spectrum: player.spectrum, isPlaying: player.state.isPlaying)
 
             if player.equalizer.isAvailable {
