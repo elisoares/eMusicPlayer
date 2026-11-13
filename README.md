@@ -16,17 +16,17 @@
 </p>
 
 <p align="center">
-  <img src="docs/bar.png" width="360" alt="Menu bar, modern style"><br>
-  <img src="docs/retro-bar.png" width="360" alt="Menu bar, retro style"><br>
+  <img src="docs/v1.0/bar.png" width="360" alt="Menu bar, modern style"><br>
+  <img src="docs/v1.0/retro-bar.png" width="360" alt="Menu bar, retro style"><br>
   <sub>Menu bar: live equalizer, song title that fills up as the song plays, time and controls (Modern and Retro styles)</sub>
 </p>
 
 <p align="center">
-  <img src="docs/panel.png" width="250" alt="Player panel, modern style">
+  <img src="docs/v1.0/panel.png" width="250" alt="Player panel, modern style">
   &nbsp;
-  <img src="docs/retro-panel.png" width="250" alt="Player panel with the retro LED equalizer">
+  <img src="docs/v1.0/retro-panel.png" width="250" alt="Player panel with the retro LED equalizer">
   &nbsp;
-  <img src="docs/settings.png" width="250" alt="Color, button and equalizer settings"><br>
+  <img src="docs/v1.0/settings.png" width="250" alt="Color, button and equalizer settings"><br>
   <sub>Panel (click the title in the menu bar): Modern · Retro · Settings</sub>
 </p>
 
@@ -91,5 +91,5 @@ The screenshots in `docs/` are taken from the running app:
 ```bash
 open -n "eMusic Player.app" --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
 # /tmp/w.txt gets "WINDOW <id>"; then:
-screencapture -x -o -l <id> docs/panel.png
+screencapture -x -o -l <id> docs/v1.0/panel.png
 ```
