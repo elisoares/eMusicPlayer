@@ -125,7 +125,7 @@ for base in [16, 32, 128, 256, 512] {
     }
 }
 try drawIcon(pixels: 1024).representation(using: .png, properties: [:])!
-    .write(to: root.appendingPathComponent("docs/icon.png"))
+    .write(to: root.appendingPathComponent("docs/app-icon.png"))
 
 let iconutil = Process()
 iconutil.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")

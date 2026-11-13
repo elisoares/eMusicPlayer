@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/icon.png" width="160" alt="eMusic Player icon">
+  <img src="docs/app-icon.png" width="160" alt="eMusic Player icon">
 </p>
 
 <h1 align="center">eMusic Player</h1>
