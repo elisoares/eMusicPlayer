@@ -48,6 +48,10 @@ final class PlayerController: ObservableObject {
     @Published private(set) var lastError: String?
     /// Apple Music equalizer; Spotify exposes no equalizer to other apps.
     @Published private(set) var equalizer = EqualizerState()
+    /// Slider drafts live here, not in view @State: writing view @State from the slider's
+    /// end-of-drag callback crashed the app (EXC_BAD_ACCESS in State.wrappedValue.setter).
+    @Published var scrubPosition: Double?
+    @Published var volumeDraft: Double?
     /// Live frequency bands of the selected app; a separate object so 30 fps updates
     /// redraw only the visualizers.
     let spectrum = AudioSpectrum()
@@ -179,6 +183,15 @@ final class PlayerController: ObservableObject {
 
     func toggleShuffle() {
         command(source == .spotify ? "set shuffling to not shuffling" : "set shuffle enabled to not shuffle enabled")
+    }
+
+    /// Applies the dragged position once, after the slider's tracking callback returns.
+    func finishScrubbing() {
+        guard let target = scrubPosition else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.seek(to: target)
+            self?.scrubPosition = nil
+        }
     }
 
     func seek(to seconds: Double) {

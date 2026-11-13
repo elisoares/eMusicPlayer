@@ -1,4 +1,4 @@
-# MenuBarPlayer
+# eMusic Player
 
 A small macOS menu bar app that shows and controls what is playing in Spotify or Apple Music.
 
@@ -20,7 +20,7 @@ A small macOS menu bar app that shows and controls what is playing in Spotify or
   left → right or bottom → top. The color of the time numbers can be changed too.
 - **Panel** (click the title in the menu bar): album artwork, title, artist and album,
   seek bar with times, shuffle, playback buttons, volume.
-- **Live spectrum:** the bars follow the music. MenuBarPlayer taps only the audio of the
+- **Live spectrum:** the bars follow the music. eMusic Player taps only the audio of the
   selected app (Core Audio process tap, macOS 14.2+) and runs an FFT into the 10 standard equalizer bands
   (31 Hz – 16 kHz), each with a falling peak marker.
   macOS asks once for *Screen & System Audio Recording* permission.
@@ -41,8 +41,8 @@ Requires macOS 13+ and Swift 5.10+.
 
 ```bash
 ./build.sh
-pkill -x MenuBarPlayer; ditto MenuBarPlayer.app /Applications/MenuBarPlayer.app
-open /Applications/MenuBarPlayer.app
+pkill -x eMusicPlayer; ditto "eMusic Player.app" "/Applications/eMusic Player.app"
+open "/Applications/eMusic Player.app"
 ```
 
 On first use macOS asks for permission to control Spotify / Music
@@ -53,7 +53,7 @@ On first use macOS asks for permission to control Spotify / Music
 The images in `docs/` are taken from the running app:
 
 ```bash
-open -n MenuBarPlayer.app --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
+open -n "eMusic Player.app" --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
 # /tmp/w.txt gets "WINDOW <id>"; then:
 screencapture -x -o -l <id> docs/panel.png
 ```

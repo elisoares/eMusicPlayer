@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "MenuBarPlayer",
+    name: "eMusicPlayer",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "MenuBarPlayer", path: "Sources/MenuBarPlayer")
+        .executableTarget(name: "eMusicPlayer", path: "Sources/eMusicPlayer")
     ]
 )

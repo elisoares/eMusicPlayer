@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 
 @main
-struct MenuBarPlayerApp: App {
+struct EMusicPlayerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
@@ -467,8 +467,6 @@ struct PlayerView: View {
     @AppStorage("barShowTitle") private var showTitle = true
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
-    @State private var scrubPosition: Double?
-    @State private var volumeDraft: Double?
     @State private var showSettings: Bool
 
     init(player: PlayerController, showSettings: Bool = false) {
@@ -659,16 +657,13 @@ struct PlayerView: View {
 
     private var progress: some View {
         let duration = max(player.state.duration, 1)
-        let current = scrubPosition ?? min(player.state.position, duration)
+        let current = player.scrubPosition ?? min(player.state.position, duration)
         return VStack(spacing: 2) {
             Slider(
-                value: Binding(get: { current }, set: { scrubPosition = $0 }),
+                value: Binding(get: { current }, set: { [player] in player.scrubPosition = $0 }),
                 in: 0...duration,
-                onEditingChanged: { editing in
-                    if !editing, let target = scrubPosition {
-                        player.seek(to: target)
-                        scrubPosition = nil
-                    }
+                onEditingChanged: { [player] editing in
+                    if !editing { player.finishScrubbing() }
                 }
             )
             .controlSize(.small)
@@ -719,11 +714,11 @@ struct PlayerView: View {
             Image(systemName: "speaker.fill").foregroundStyle(.secondary)
             Slider(
                 value: Binding(
-                    get: { volumeDraft ?? player.state.volume },
-                    set: { volumeDraft = $0; player.setVolume($0) }
+                    get: { [player] in player.volumeDraft ?? player.state.volume },
+                    set: { [player] in player.volumeDraft = $0; player.setVolume($0) }
                 ),
                 in: 0...100,
-                onEditingChanged: { if !$0 { volumeDraft = nil } }
+                onEditingChanged: { [player] editing in if !editing { player.volumeDraft = nil } }
             )
             .controlSize(.small)
             Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
@@ -782,7 +777,7 @@ struct SpectrumNote: View {
 
     private var message: String? {
         if spectrum.isSilent {
-            return "Sem áudio captado. Permita o MenuBarPlayer em Ajustes do Sistema › Privacidade e Segurança › Gravação de Tela e Áudio do Sistema."
+            return "Sem áudio captado. Permita o eMusic Player em Ajustes do Sistema › Privacidade e Segurança › Gravação de Tela e Áudio do Sistema."
         }
         if spectrum.levels.isEmpty, let failure = spectrum.failure {
             return failure

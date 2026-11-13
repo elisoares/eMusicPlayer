@@ -100,7 +100,7 @@ final class TapCapture {
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
     private var analyzer: SpectrumAnalyzer?
-    private let queue = DispatchQueue(label: "MenuBarPlayer.tap", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "eMusicPlayer.tap", qos: .userInteractive)
 
     init(bundlePrefix: String, onBands: @escaping ([Float]) -> Void) throws {
         let processes = try Self.audioProcesses(bundlePrefix: bundlePrefix)
@@ -123,7 +123,7 @@ final class TapCapture {
             let outputUID = try Self.stringProperty(outputID, kAudioDevicePropertyDeviceUID)
 
             let aggregate: [String: Any] = [
-                kAudioAggregateDeviceNameKey: "MenuBarPlayer Spectrum",
+                kAudioAggregateDeviceNameKey: "eMusic Player Spectrum",
                 kAudioAggregateDeviceUIDKey: UUID().uuidString,
                 kAudioAggregateDeviceMainSubDeviceKey: outputUID,
                 kAudioAggregateDeviceIsPrivateKey: true,

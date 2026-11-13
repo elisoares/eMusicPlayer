@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// `MenuBarPlayer --preview panel|bar` opens the panel or the menu bar strip in a normal
+/// `eMusicPlayer --preview panel|bar` opens the panel or the menu bar strip in a normal
 /// window and prints its window id, so `screencapture -l <id>` can take README screenshots.
 enum Preview {
     enum Mode: String { case panel, settings, bar }
