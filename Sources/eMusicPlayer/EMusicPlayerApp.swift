@@ -2,13 +2,19 @@ import AppKit
 import Combine
 import SwiftUI
 
+/// Plain AppKit entry point. A SwiftUI `App` needs at least one scene, and its placeholder
+/// Settings scene opened as an empty "eMusic Player Settings" window when the app was
+/// reopened. All UI lives in the status item and its popover.
 @main
-struct EMusicPlayerApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+enum EMusicPlayerMain {
+    @MainActor private static let delegate = AppDelegate()
 
-    var body: some Scene {
-        // The UI lives in the status item managed by AppDelegate.
-        Settings { EmptyView() }
+    @MainActor
+    static func main() {
+        let app = NSApplication.shared
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.run()
     }
 }
 
@@ -46,6 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
+    /// Opening the app again (Finder, Spotlight, Launchpad) shows the player panel.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if statusItem != nil, !popover.isShown { togglePopover() }
+        return false
+    }
+
     private func resizeStatusItem() {
         guard let item = statusItem, let host = barHost, let button = item.button else { return }
         let size = host.fittingSize
@@ -60,6 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             player.refresh()
             player.loadEqualizer()
+            // A transient popover closes at once if the app is not active (e.g. when reopened from Finder).
+            NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
