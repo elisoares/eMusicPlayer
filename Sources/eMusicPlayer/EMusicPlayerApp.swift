@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private let popover = NSPopover()
     /// The player detached from the menu bar: a floating window that stays above other apps.
     private var panel: NSPanel?
+    private var isTerminating = false
     private var cancellables: Set<AnyCancellable> = []
 
     private static let detachedKey = "panelDetached"
@@ -83,11 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         if host.frame != frame { host.frame = frame }
     }
 
+    /// The menu bar always opens the card, even while the floating window is open.
     private func togglePopover() {
-        if let panel, panel.isVisible {
-            panel.orderFrontRegardless()
-            return
-        }
         guard let button = statusItem?.button else { return }
         if popover.isShown {
             popover.performClose(nil)
@@ -113,19 +111,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     private func detach() {
         popover.performClose(nil)
+        if let panel, panel.isVisible {
+            panel.orderFrontRegardless()
+            return
+        }
         UserDefaults.standard.set(true, forKey: Self.detachedKey)
         makePanel().orderFrontRegardless()
     }
 
     private func makePanel() -> NSPanel {
         if let panel { return panel }
-        let host = NSHostingController(rootView: PlayerView(player: player, isDetached: true) { [weak self] in
+        let host = NSHostingController(rootView: PlayerView(
+            player: player, isDetached: true,
+            onContentHeight: { [weak self] height in self?.fitPanelHeight(height) }
+        ) { [weak self] in
             self?.panel?.close()
         })
-        host.sizingOptions = [.intrinsicContentSize, .preferredContentSize]
+        // Content sets the minimum size; the user can widen it into the horizontal layout.
+        host.sizingOptions = [.minSize]
         let panel = NSPanel(
             contentRect: .zero,
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel, .utilityWindow],
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel, .utilityWindow],
             backing: .buffered, defer: true
         )
         panel.contentViewController = host
@@ -145,8 +151,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         return panel
     }
 
+    /// The user sets the width; the height follows the content, keeping the top edge in place.
+    private func fitPanelHeight(_ contentHeight: CGFloat) {
+        guard let panel else { return }
+        let target = panel.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 1, height: contentHeight)).height
+        guard abs(panel.frame.height - target) > 0.5 else { return }
+        var frame = panel.frame
+        frame.origin.y += frame.height - target
+        frame.size.height = target
+        panel.setFrame(frame, display: true)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
+    }
+
+    /// Closing the window puts the player back in the menu bar; quitting the app keeps the choice.
     func windowWillClose(_ notification: Notification) {
-        guard (notification.object as? NSPanel) === panel else { return }
+        guard !isTerminating, (notification.object as? NSPanel) === panel else { return }
         UserDefaults.standard.set(false, forKey: Self.detachedKey)
     }
 }
@@ -594,11 +616,17 @@ struct PlayerView: View {
     let isDetached: Bool
     /// Detaches the popover, or puts the floating window back in the menu bar.
     let onTogglePin: (() -> Void)?
+    /// Floating window only: reports the content height so the window fits it.
+    var onContentHeight: ((CGFloat) -> Void)?
 
-    init(player: PlayerController, showSettings: Bool = false, isDetached: Bool = false, onTogglePin: (() -> Void)? = nil) {
+    init(
+        player: PlayerController, showSettings: Bool = false, isDetached: Bool = false,
+        onContentHeight: ((CGFloat) -> Void)? = nil, onTogglePin: (() -> Void)? = nil
+    ) {
         self.player = player
         _showSettings = State(initialValue: showSettings)
         self.isDetached = isDetached
+        self.onContentHeight = onContentHeight
         self.onTogglePin = onTogglePin
     }
 
@@ -632,12 +660,23 @@ struct PlayerView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
                 controls
+            } else if isDetached {
+                // Widening the floating window switches to the horizontal layout.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        nowPlaying.frame(width: 272)
+                        VStack(spacing: 12) {
+                            progress
+                            controls
+                            volume
+                            equalizer
+                        }
+                        .frame(minWidth: 280)
+                    }
+                    VStack(spacing: 12) { verticalPlayer }
+                }
             } else {
-                nowPlaying
-                progress
-                controls
-                volume
-                equalizer
+                verticalPlayer
             }
 
             if let error = player.lastError {
@@ -651,6 +690,8 @@ struct PlayerView: View {
             HStack {
                 Button("Abrir \(Spotify.name)") { player.openApp() }
                 Spacer()
+                UpdateButton(checker: .shared)
+                Spacer()
                 Button("Sair") { NSApp.terminate(nil) }
             }
             .buttonStyle(.borderless)
@@ -658,8 +699,19 @@ struct PlayerView: View {
         }
         .padding(14)
         .padding(.top, Preview.mode != nil || isDetached ? 14 : 0)
-        .frame(width: 300)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { onContentHeight?($0) }
+        .frame(width: isDetached ? nil : 300)
+        .frame(minWidth: 300, maxWidth: isDetached ? .infinity : 300, maxHeight: isDetached ? .infinity : nil, alignment: .top)
         .tint(accent.color)
+    }
+
+    @ViewBuilder
+    private var verticalPlayer: some View {
+        nowPlaying
+        progress
+        controls
+        volume
+        equalizer
     }
 
     // MARK: Settings

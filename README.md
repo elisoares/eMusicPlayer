@@ -62,7 +62,11 @@ Requires macOS 13 or newer (the live equalizer needs macOS 14.2). Runs on Apple 
   (Core Audio process tap) and runs an FFT on it.
 - **Floating player:** the pin button (or dragging the panel away from the menu bar)
   detaches it into a small window that stays above other apps on every desktop. The pin
-  puts it back; the app remembers which one you used.
+  puts it back; the app remembers which one you used. Make the window wider for a
+  horizontal layout (artwork on the left, controls and equalizer on the right); its
+  height follows the content.
+- **Updates:** the "Atualizações" button at the bottom of the panel checks the latest
+  GitHub release and offers its DMG when there is a newer version.
 - **Appearance** (palette button at the top of the panel): accent color, button color,
   player style (Standard, Compact, Retro LCD), button style for the player and for the
   menu bar (Classic, Filled, Outline, Soft, Minimal) and equalizer style:
