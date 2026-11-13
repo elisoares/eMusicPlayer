@@ -22,6 +22,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>MenuBarPlayer escuta o áudio do Spotify ou do Apple Music para desenhar o equalizador conforme a música.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>MenuBarPlayer controla o Spotify e o Apple Music para mostrar a faixa atual e tocar, pausar e pular músicas.</string>
 </dict>

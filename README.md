@@ -11,12 +11,16 @@ A small macOS menu bar app that shows and controls what is playing in Spotify or
 
 ## Features
 
-- **Menu bar:** animated equalizer bars, track title, elapsed / total time and
-  previous / play-pause / next buttons. Each part can be turned on or off.
+- **Menu bar:** live spectrum bars, track title, elapsed / total time and
+  shuffle / previous / play-pause / next buttons. Each part can be turned on or off.
 - **Panel** (click the title in the menu bar): album artwork, title, artist and album,
-  seek bar with times, large play/pause, volume.
-- **Colors:** pick the accent color from the palette button at the top of the panel.
-- **Equalizer:**
+  seek bar with times, shuffle, playback buttons, volume.
+- **Live spectrum:** the bars follow the music. MenuBarPlayer taps only the audio of the
+  selected app (Core Audio process tap, macOS 14.2+) and runs an FFT into 24 bands.
+  macOS asks once for *Screen & System Audio Recording* permission.
+- **Appearance** (palette button at the top of the panel): accent color, button color and
+  button style (Classic, Filled, Outline, Soft, Minimal).
+- **Equalizer presets:**
   - Apple Music: turn the equalizer on/off and pick a preset (Rock, Jazz, Bass Booster…).
   - Spotify does not let other apps change its equalizer; the panel points to
     Spotify › Settings › Playback › Equalizer instead.
@@ -41,7 +45,7 @@ On first use macOS asks for permission to control Spotify / Music
 The images in `docs/` are taken from the running app:
 
 ```bash
-.build/release/MenuBarPlayer --preview panel   # also: settings, bar
-# prints "WINDOW <id>"; then:
+open -n MenuBarPlayer.app --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
+# /tmp/w.txt gets "WINDOW <id>"; then:
 screencapture -x -o -l <id> docs/panel.png
 ```

@@ -28,6 +28,7 @@ struct TrackState: Equatable {
     var duration: Double = 0
     var position: Double = 0
     var volume: Double = 50
+    var isShuffling = false
     /// Spotify artwork URL or Apple Music persistent ID; changes trigger an artwork reload.
     var artworkKey = ""
 }
@@ -47,6 +48,9 @@ final class PlayerController: ObservableObject {
     @Published private(set) var lastError: String?
     /// Apple Music equalizer; Spotify exposes no equalizer to other apps.
     @Published private(set) var equalizer = EqualizerState()
+    /// Live frequency bands of the selected app; a separate object so 30 fps updates
+    /// redraw only the visualizers.
+    let spectrum = AudioSpectrum()
     @Published var source: PlayerSource {
         didSet {
             UserDefaults.standard.set(source.rawValue, forKey: "source")
@@ -98,10 +102,12 @@ final class PlayerController: ObservableObject {
             state = TrackState()
             artwork = nil
             loadedArtworkKey = ""
+            spectrum.stop()
             return
         }
         guard let next = query(source) else { return }
         state = next
+        spectrum.sync(source: source, isPlaying: next.isPlaying)
         if next.artworkKey != loadedArtworkKey {
             loadedArtworkKey = next.artworkKey
             loadArtwork(for: next)
@@ -117,7 +123,7 @@ final class PlayerController: ObservableObject {
                 set s to player state as string
                 if s is "stopped" then return {s}
                 set t to current track
-                return {s, name of t, artist of t, album of t, (duration of t) / 1000, player position, sound volume, artwork url of t}
+                return {s, name of t, artist of t, album of t, (duration of t) / 1000, player position, sound volume, artwork url of t, shuffling}
             end tell
             """
         case .music:
@@ -126,7 +132,7 @@ final class PlayerController: ObservableObject {
                 set s to player state as string
                 if s is "stopped" then return {s}
                 set t to current track
-                return {s, name of t, artist of t, album of t, duration of t, player position, sound volume, persistent ID of t}
+                return {s, name of t, artist of t, album of t, duration of t, player position, sound volume, persistent ID of t, shuffle enabled}
             end tell
             """
         }
@@ -142,6 +148,7 @@ final class PlayerController: ObservableObject {
         track.position = result.atIndex(6)?.doubleValue ?? 0
         track.volume = Double(result.atIndex(7)?.int32Value ?? 50)
         track.artworkKey = result.atIndex(8)?.stringValue ?? ""
+        track.isShuffling = result.atIndex(9)?.booleanValue ?? false
         return track
     }
 
@@ -169,6 +176,10 @@ final class PlayerController: ObservableObject {
     func playPause() { command("playpause") }
     func next() { command("next track") }
     func previous() { command("previous track") }
+
+    func toggleShuffle() {
+        command(source == .spotify ? "set shuffling to not shuffling" : "set shuffle enabled to not shuffle enabled")
+    }
 
     func seek(to seconds: Double) {
         command("set player position to \(Int(seconds))")
