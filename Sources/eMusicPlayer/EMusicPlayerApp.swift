@@ -255,7 +255,7 @@ enum FillDirection: String, CaseIterable, Identifiable {
 }
 
 /// Song title that doubles as a progress meter: the played part is painted with the
-/// equalizer's color, the rest stays dim.
+/// equalizer's color, the rest keeps the menu bar's normal text color.
 struct ProgressTitle: View {
     let text: String
     let progress: Double
@@ -265,7 +265,7 @@ struct ProgressTitle: View {
     var body: some View {
         Text(text)
             .lineLimit(1)
-            .foregroundStyle(.primary.opacity(0.45))
+            .foregroundStyle(.primary)
             .overlay(alignment: .leading) {
                 GeometryReader { geo in
                     Text(text)
