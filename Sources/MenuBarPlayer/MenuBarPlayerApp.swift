@@ -90,6 +90,11 @@ enum Accent: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Time labels: "standard" keeps the usual dim secondary color.
+    var timeStyle: AnyShapeStyle {
+        self == .standard ? AnyShapeStyle(.secondary) : AnyShapeStyle(color)
+    }
+
     var label: String {
         switch self {
         case .standard: "Padrão"
@@ -229,17 +234,24 @@ enum VisualizerStyle: String, CaseIterable, Identifiable {
     var label: String { self == .modern ? "Moderno" : "Retrô" }
 
     /// The equalizer's colors, reused by the menu bar title progress fill.
-    func fill(accent: Color) -> AnyShapeStyle {
+    func fill(accent: Color, direction: FillDirection) -> AnyShapeStyle {
         switch self {
         case .modern:
             AnyShapeStyle(accent)
         case .retro:
             AnyShapeStyle(LinearGradient(
                 colors: [RetroSpectrum.color(at: 0), RetroSpectrum.color(at: 0.55), RetroSpectrum.color(at: 1)],
-                startPoint: .leading, endPoint: .trailing
+                startPoint: direction == .leftToRight ? .leading : .bottom,
+                endPoint: direction == .leftToRight ? .trailing : .top
             ))
         }
     }
+}
+
+enum FillDirection: String, CaseIterable, Identifiable {
+    case leftToRight, bottomToTop
+    var id: String { rawValue }
+    var label: String { self == .leftToRight ? "Esquerda → direita" : "Baixo → cima" }
 }
 
 /// Song title that doubles as a progress meter: the played part is painted with the
@@ -248,6 +260,7 @@ struct ProgressTitle: View {
     let text: String
     let progress: Double
     let fill: AnyShapeStyle
+    var direction = FillDirection.leftToRight
 
     var body: some View {
         Text(text)
@@ -258,9 +271,12 @@ struct ProgressTitle: View {
                     Text(text)
                         .lineLimit(1)
                         .foregroundStyle(fill)
-                        .frame(width: geo.size.width, alignment: .leading)
-                        .mask(alignment: .leading) {
-                            Rectangle().frame(width: geo.size.width * progress)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .leading)
+                        .mask(alignment: direction == .leftToRight ? .leading : .bottom) {
+                            switch direction {
+                            case .leftToRight: Rectangle().frame(width: geo.size.width * progress)
+                            case .bottomToTop: Rectangle().frame(height: geo.size.height * progress)
+                            }
                         }
                 }
             }
@@ -362,6 +378,8 @@ struct StatusBarView: View {
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
     @AppStorage("barTitleProgress") private var titleShowsProgress = true
+    @AppStorage("barTitleFill") private var fillDirection = FillDirection.leftToRight
+    @AppStorage("timeColor") private var timeColor = Accent.standard
     @AppStorage("visualizerStyle") private var visualizerStyle = VisualizerStyle.modern
 
     private var progress: Double {
@@ -377,13 +395,17 @@ struct StatusBarView: View {
                         .frame(width: 40, height: 15)
                     if hasTrack, showTitle {
                         if titleShowsProgress {
-                            ProgressTitle(text: shortTitle, progress: progress, fill: visualizerStyle.fill(accent: accent.color))
+                            ProgressTitle(
+                                text: shortTitle, progress: progress,
+                                fill: visualizerStyle.fill(accent: accent.color, direction: fillDirection),
+                                direction: fillDirection
+                            )
                         } else {
                             Text(shortTitle).lineLimit(1)
                         }
                     }
                     if hasTrack, showTime {
-                        Text(timeLabel).monospacedDigit().foregroundStyle(.secondary)
+                        Text(timeLabel).monospacedDigit().foregroundStyle(timeColor.timeStyle)
                     }
                 }
                 .contentShape(Rectangle())
@@ -440,6 +462,8 @@ struct PlayerView: View {
     @AppStorage("buttonStyle") private var buttonStyle = ControlStyle.classic
     @AppStorage("visualizerStyle") private var visualizerStyle = VisualizerStyle.modern
     @AppStorage("barTitleProgress") private var titleShowsProgress = true
+    @AppStorage("barTitleFill") private var fillDirection = FillDirection.leftToRight
+    @AppStorage("timeColor") private var timeColor = Accent.standard
     @AppStorage("barShowTitle") private var showTitle = true
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
@@ -554,6 +578,15 @@ struct PlayerView: View {
             }
             Toggle("Nome mostra o tempo da música", isOn: $titleShowsProgress)
                 .disabled(!showTitle)
+            Picker("", selection: $fillDirection) {
+                ForEach(FillDirection.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .disabled(!showTitle || !titleShowsProgress)
+
+            Text("Cor dos números de tempo").font(.caption).foregroundStyle(.secondary)
+            swatches(Accent.allCases, selection: $timeColor)
         }
         .toggleStyle(.checkbox)
         .padding(10)
@@ -645,7 +678,7 @@ struct PlayerView: View {
                 Text("-" + formatTime(duration - current))
             }
             .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(timeColor.timeStyle)
         }
     }
 
