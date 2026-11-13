@@ -15,6 +15,8 @@ A small macOS menu bar app that shows and controls what is playing in Spotify or
 
 - **Menu bar:** live spectrum bars, track title, elapsed / total time and
   shuffle / previous / play-pause / next buttons. Each part can be turned on or off.
+  The title doubles as a progress meter: it fills left to right with the equalizer's
+  color (accent in Modern, green → yellow → red in Retro) as the song plays.
 - **Panel** (click the title in the menu bar): album artwork, title, artist and album,
   seek bar with times, shuffle, playback buttons, volume.
 - **Live spectrum:** the bars follow the music. MenuBarPlayer taps only the audio of the

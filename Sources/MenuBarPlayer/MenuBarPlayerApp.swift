@@ -227,6 +227,47 @@ enum VisualizerStyle: String, CaseIterable, Identifiable {
     case modern, retro
     var id: String { rawValue }
     var label: String { self == .modern ? "Moderno" : "Retrô" }
+
+    /// The equalizer's colors, reused by the menu bar title progress fill.
+    func fill(accent: Color) -> AnyShapeStyle {
+        switch self {
+        case .modern:
+            AnyShapeStyle(accent)
+        case .retro:
+            AnyShapeStyle(LinearGradient(
+                colors: [RetroSpectrum.color(at: 0), RetroSpectrum.color(at: 0.55), RetroSpectrum.color(at: 1)],
+                startPoint: .leading, endPoint: .trailing
+            ))
+        }
+    }
+}
+
+/// Song title that doubles as a progress meter: the played part is painted with the
+/// equalizer's color, the rest stays dim.
+struct ProgressTitle: View {
+    let text: String
+    let progress: Double
+    let fill: AnyShapeStyle
+
+    var body: some View {
+        Text(text)
+            .lineLimit(1)
+            .foregroundStyle(.primary.opacity(0.45))
+            .overlay(alignment: .leading) {
+                GeometryReader { geo in
+                    Text(text)
+                        .lineLimit(1)
+                        .foregroundStyle(fill)
+                        .frame(width: geo.size.width, alignment: .leading)
+                        .mask(alignment: .leading) {
+                            Rectangle().frame(width: geo.size.width * progress)
+                        }
+                }
+            }
+            // Position arrives once per second; slide between readings.
+            .animation(.linear(duration: 1), value: progress)
+            .help("\(Int((progress * 100).rounded()))% da música")
+    }
 }
 
 /// Classic LED spectrum analyzer: segmented bars on black, green at the bottom fading
@@ -295,7 +336,7 @@ struct RetroSpectrum: View {
     }
 
     /// Green → yellow → red as the segment rises.
-    private static func color(at fraction: Double) -> Color {
+    static func color(at fraction: Double) -> Color {
         let (from, to, t) = fraction < 0.55
             ? (green, yellow, fraction / 0.55)
             : (yellow, red, (fraction - 0.55) / 0.45)
@@ -320,6 +361,13 @@ struct StatusBarView: View {
     @AppStorage("barShowTitle") private var showTitle = true
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
+    @AppStorage("barTitleProgress") private var titleShowsProgress = true
+    @AppStorage("visualizerStyle") private var visualizerStyle = VisualizerStyle.modern
+
+    private var progress: Double {
+        guard player.state.duration > 0 else { return 0 }
+        return min(1, max(0, player.state.position / player.state.duration))
+    }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -328,7 +376,11 @@ struct StatusBarView: View {
                     SpectrumBars(spectrum: player.spectrum, color: accent.color, spacingRatio: 0.25, peakThickness: 1)
                         .frame(width: 40, height: 15)
                     if hasTrack, showTitle {
-                        Text(shortTitle).lineLimit(1)
+                        if titleShowsProgress {
+                            ProgressTitle(text: shortTitle, progress: progress, fill: visualizerStyle.fill(accent: accent.color))
+                        } else {
+                            Text(shortTitle).lineLimit(1)
+                        }
                     }
                     if hasTrack, showTime {
                         Text(timeLabel).monospacedDigit().foregroundStyle(.secondary)
@@ -387,6 +439,7 @@ struct PlayerView: View {
     @AppStorage("buttonColor") private var buttonColor = Accent.standard
     @AppStorage("buttonStyle") private var buttonStyle = ControlStyle.classic
     @AppStorage("visualizerStyle") private var visualizerStyle = VisualizerStyle.modern
+    @AppStorage("barTitleProgress") private var titleShowsProgress = true
     @AppStorage("barShowTitle") private var showTitle = true
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
@@ -499,6 +552,8 @@ struct PlayerView: View {
                 Toggle("Tempo", isOn: $showTime)
                 Toggle("Botões", isOn: $showControls)
             }
+            Toggle("Nome mostra o tempo da música", isOn: $titleShowsProgress)
+                .disabled(!showTitle)
         }
         .toggleStyle(.checkbox)
         .padding(10)
