@@ -3,10 +3,12 @@
 A small macOS menu bar app that shows and controls what is playing in Spotify or Apple Music.
 
 ![Menu bar](docs/bar.png)
+![Menu bar, retro style](docs/retro-bar.png)
 
 <p>
-  <img src="docs/panel.png" width="300" alt="Player panel">
-  <img src="docs/settings.png" width="300" alt="Color and menu bar settings">
+  <img src="docs/panel.png" width="260" alt="Player panel">
+  <img src="docs/retro-panel.png" width="260" alt="Player panel with the retro LED equalizer">
+  <img src="docs/settings.png" width="260" alt="Color, button and equalizer settings">
 </p>
 
 ## Features
@@ -20,7 +22,9 @@ A small macOS menu bar app that shows and controls what is playing in Spotify or
   (31 Hz – 16 kHz), each with a falling peak marker.
   macOS asks once for *Screen & System Audio Recording* permission.
 - **Appearance** (palette button at the top of the panel): accent color, button color and
-  button style (Classic, Filled, Outline, Soft, Minimal).
+  button style (Classic, Filled, Outline, Soft, Minimal), and equalizer style:
+  - **Modern:** rounded bars in the accent color.
+  - **Retro:** segmented LED bars on black, green → yellow → red, with light peak segments.
 - **Equalizer presets:**
   - Apple Music: turn the equalizer on/off and pick a preset (Rock, Jazz, Bass Booster…).
   - Spotify does not let other apps change its equalizer; the panel points to

@@ -170,12 +170,21 @@ struct SpectrumBars: View {
     var spacingRatio: CGFloat = 0.3
     var peakThickness: CGFloat = 2
     var showsLabels = false
+    @AppStorage("visualizerStyle") private var style = VisualizerStyle.modern
 
     var body: some View {
         let count = equalizerBands.count
         let levels = spectrum.levels.count == count ? spectrum.levels : []
         let peaks = spectrum.peaks.count == count ? spectrum.peaks : []
-        VStack(spacing: 3) {
+        switch style {
+        case .modern: modern(levels: levels, peaks: peaks)
+        case .retro: RetroSpectrum(levels: levels, peaks: peaks, isCompact: !showsLabels)
+        }
+    }
+
+    private func modern(levels: [Float], peaks: [Float]) -> some View {
+        let count = equalizerBands.count
+        return VStack(spacing: 3) {
             GeometryReader { geo in
                 let slot = geo.size.width / CGFloat(count)
                 let barWidth = slot * (1 - spacingRatio)
@@ -211,6 +220,88 @@ struct SpectrumBars: View {
                 }
             }
         }
+    }
+}
+
+enum VisualizerStyle: String, CaseIterable, Identifiable {
+    case modern, retro
+    var id: String { rawValue }
+    var label: String { self == .modern ? "Moderno" : "Retrô" }
+}
+
+/// Classic LED spectrum analyzer: segmented bars on black, green at the bottom fading
+/// through yellow to red at the top, with a light peak segment above each bar.
+struct RetroSpectrum: View {
+    let levels: [Float]
+    let peaks: [Float]
+    /// Menu bar size: no panel, thinner segments, no labels.
+    let isCompact: Bool
+
+    private static let green = (r: 0.10, g: 0.85, b: 0.20)
+    private static let yellow = (r: 0.95, g: 0.85, b: 0.10)
+    private static let red = (r: 0.95, g: 0.18, b: 0.10)
+
+    var body: some View {
+        if isCompact {
+            analyzer
+        } else {
+            VStack(spacing: 4) {
+                analyzer
+                HStack(spacing: 0) {
+                    ForEach(equalizerBandLabels, id: \.self) { label in
+                        Text(label)
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.1, green: 0.85, blue: 0.2))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .padding(6)
+            .background(Color.black, in: RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.gray.opacity(0.5), lineWidth: 1))
+        }
+    }
+
+    private var analyzer: some View {
+        Canvas { context, size in
+            let count = equalizerBands.count
+            let segment: CGFloat = isCompact ? 2 : 3
+            let gap: CGFloat = 1
+            let rows = max(1, Int((size.height + gap) / (segment + gap)))
+            let slot = size.width / CGFloat(count)
+            let barWidth = slot * (isCompact ? 0.75 : 0.8)
+
+            for band in 0..<count {
+                let x = slot * CGFloat(band) + (slot - barWidth) / 2
+                let level = levels.isEmpty ? 0 : CGFloat(levels[band])
+                let lit = levels.isEmpty ? 1 : max(1, Int((level * CGFloat(rows)).rounded()))
+                for row in 0..<rows {
+                    let y = size.height - CGFloat(row + 1) * (segment + gap) + gap
+                    let rect = CGRect(x: x, y: y, width: barWidth, height: segment)
+                    if row < lit {
+                        context.fill(Path(rect), with: .color(Self.color(at: Double(row) / Double(max(1, rows - 1)))))
+                    } else if !isCompact {
+                        context.fill(Path(rect), with: .color(Color.white.opacity(0.06)))
+                    }
+                }
+                if !peaks.isEmpty {
+                    let peakRow = min(rows - 1, max(lit, Int((CGFloat(peaks[band]) * CGFloat(rows)).rounded())))
+                    let y = size.height - CGFloat(peakRow + 1) * (segment + gap) + gap
+                    context.fill(Path(CGRect(x: x, y: y, width: barWidth, height: segment)),
+                                 with: .color(Color(white: 0.85)))
+                }
+            }
+        }
+    }
+
+    /// Green → yellow → red as the segment rises.
+    private static func color(at fraction: Double) -> Color {
+        let (from, to, t) = fraction < 0.55
+            ? (green, yellow, fraction / 0.55)
+            : (yellow, red, (fraction - 0.55) / 0.45)
+        return Color(red: from.r + (to.r - from.r) * t,
+                     green: from.g + (to.g - from.g) * t,
+                     blue: from.b + (to.b - from.b) * t)
     }
 }
 
@@ -295,6 +386,7 @@ struct PlayerView: View {
     @AppStorage("accent") private var accent = Accent.green
     @AppStorage("buttonColor") private var buttonColor = Accent.standard
     @AppStorage("buttonStyle") private var buttonStyle = ControlStyle.classic
+    @AppStorage("visualizerStyle") private var visualizerStyle = VisualizerStyle.modern
     @AppStorage("barShowTitle") private var showTitle = true
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
@@ -393,6 +485,13 @@ struct PlayerView: View {
                     .onTapGesture { buttonStyle = style }
                 }
             }
+
+            Text("Estilo do equalizador").font(.caption).foregroundStyle(.secondary)
+            Picker("", selection: $visualizerStyle) {
+                ForEach(VisualizerStyle.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
             Text("Barra de menus").font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
