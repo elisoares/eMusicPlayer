@@ -32,18 +32,28 @@ struct TrackState: Equatable {
     var artworkKey = ""
 }
 
+struct EqualizerState: Equatable {
+    var isAvailable = false
+    var isEnabled = false
+    var preset = ""
+    var presets: [String] = []
+}
+
 @MainActor
 final class PlayerController: ObservableObject {
     @Published private(set) var state = TrackState()
     @Published private(set) var artwork: NSImage?
     @Published private(set) var isAppRunning = false
     @Published private(set) var lastError: String?
+    /// Apple Music equalizer; Spotify exposes no equalizer to other apps.
+    @Published private(set) var equalizer = EqualizerState()
     @Published var source: PlayerSource {
         didSet {
             UserDefaults.standard.set(source.rawValue, forKey: "source")
             artwork = nil
             loadedArtworkKey = ""
             refresh()
+            loadEqualizer()
         }
     }
 
@@ -171,6 +181,46 @@ final class PlayerController: ObservableObject {
     func openApp() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: source.bundleID) else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: .init())
+    }
+
+    // MARK: - Equalizer (Apple Music only)
+
+    func loadEqualizer() {
+        guard source == .music, source.isRunning else {
+            equalizer = EqualizerState()
+            return
+        }
+        let script = """
+        tell application "Music"
+            return {EQ enabled, name of current EQ preset, name of every EQ preset}
+        end tell
+        """
+        guard let result = run(script, reportErrors: false), result.numberOfItems >= 3 else { return }
+        var next = EqualizerState(isAvailable: true)
+        next.isEnabled = result.atIndex(1)?.booleanValue ?? false
+        next.preset = result.atIndex(2)?.stringValue ?? ""
+        if let list = result.atIndex(3) {
+            next.presets = (0..<list.numberOfItems).compactMap { list.atIndex($0 + 1)?.stringValue }
+        }
+        equalizer = next
+    }
+
+    func setEqualizerEnabled(_ enabled: Bool) {
+        guard source == .music else { return }
+        _ = run("tell application \"Music\" to set EQ enabled to \(enabled)")
+        loadEqualizer()
+    }
+
+    func setEqualizerPreset(_ name: String) {
+        guard source == .music else { return }
+        let escaped = name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        _ = run("""
+        tell application "Music"
+            set current EQ preset to EQ preset "\(escaped)"
+            set EQ enabled to true
+        end tell
+        """)
+        loadEqualizer()
     }
 
     private func command(_ body: String) {
