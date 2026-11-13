@@ -1,33 +1,67 @@
-# eMusic Player
-
-<img src="docs/icon.png" width="128" alt="eMusic Player icon">
-
-A small macOS menu bar app that shows and controls what is playing in Spotify or Apple Music.
-
-![Menu bar](docs/bar.png)
-![Menu bar, retro style](docs/retro-bar.png)
-
-<p>
-  <img src="docs/panel.png" width="260" alt="Player panel">
-  <img src="docs/retro-panel.png" width="260" alt="Player panel with the retro LED equalizer">
-  <img src="docs/settings.png" width="260" alt="Color, button and equalizer settings">
+<p align="center">
+  <img src="docs/icon.png" width="160" alt="eMusic Player icon">
 </p>
+
+<h1 align="center">eMusic Player</h1>
+
+<p align="center">
+  A small macOS menu bar app that shows and controls what is playing in Spotify or Apple Music,<br>
+  with a live equalizer that follows the music.
+</p>
+
+<p align="center">
+  <a href="https://github.com/elisoares/eMusicPlayer/releases/latest/download/eMusicPlayer.dmg"><b>⬇ Download the latest version (.dmg)</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/elisoares/eMusicPlayer/releases">All releases</a>
+</p>
+
+<p align="center">
+  <img src="docs/bar.png" width="360" alt="Menu bar, modern style"><br>
+  <img src="docs/retro-bar.png" width="360" alt="Menu bar, retro style"><br>
+  <sub>Menu bar: live equalizer, song title that fills up as the song plays, time and controls (Modern and Retro styles)</sub>
+</p>
+
+<p align="center">
+  <img src="docs/panel.png" width="250" alt="Player panel, modern style">
+  &nbsp;
+  <img src="docs/retro-panel.png" width="250" alt="Player panel with the retro LED equalizer">
+  &nbsp;
+  <img src="docs/settings.png" width="250" alt="Color, button and equalizer settings"><br>
+  <sub>Panel (click the title in the menu bar): Modern · Retro · Settings</sub>
+</p>
+
+## Install
+
+1. Download [eMusicPlayer.dmg](https://github.com/elisoares/eMusicPlayer/releases/latest/download/eMusicPlayer.dmg),
+   open it and drag **eMusic Player** to **Applications**.
+2. The app is not notarized by Apple, so the first launch is blocked. Open
+   **System Settings › Privacy & Security**, scroll down and click **Open Anyway** next to
+   eMusic Player. Or run once in Terminal:
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/eMusic Player.app"
+   ```
+
+3. On first use macOS asks for two permissions:
+   - **Automation** for Spotify / Music, to read the current song and control playback.
+   - **Screen & System Audio Recording**, so the equalizer can follow the music. Only the
+     music app's audio is analyzed; nothing is recorded or saved.
+
+Requires macOS 13 or newer (the live equalizer needs macOS 14.2). Runs on Apple silicon and Intel.
 
 ## Features
 
-- **Menu bar:** live spectrum bars, track title, elapsed / total time and
+- **Menu bar:** live equalizer, song title, elapsed / total time and
   shuffle / previous / play-pause / next buttons. Each part can be turned on or off.
-  The title doubles as a progress meter: it fills left to right with the equalizer's
-  color (accent in Modern, green → yellow → red in Retro) as the song plays, either
-  left → right or bottom → top. The color of the time numbers can be changed too.
-- **Panel** (click the title in the menu bar): album artwork, title, artist and album,
-  seek bar with times, shuffle, playback buttons, volume.
-- **Live spectrum:** the bars follow the music. eMusic Player taps only the audio of the
-  selected app (Core Audio process tap, macOS 14.2+) and runs an FFT into the 10 standard equalizer bands
-  (31 Hz – 16 kHz), each with a falling peak marker.
-  macOS asks once for *Screen & System Audio Recording* permission.
-- **Appearance** (palette button at the top of the panel): accent color, button color and
-  button style (Classic, Filled, Outline, Soft, Minimal), and equalizer style:
+  The title doubles as a progress meter: it fills with the equalizer's color as the song
+  plays, left → right or bottom → top. The color of the time numbers can be changed too.
+- **Panel:** album artwork, title, artist and album, seek bar with times, shuffle,
+  playback buttons, volume and the equalizer.
+- **Live equalizer:** the 10 standard bands (31 Hz – 16 kHz) of the music, each with a
+  falling peak marker. eMusic Player taps only the audio of the selected app
+  (Core Audio process tap) and runs an FFT on it.
+- **Appearance** (palette button at the top of the panel): accent color, button color,
+  button style (Classic, Filled, Outline, Soft, Minimal) and equalizer style:
   - **Modern:** rounded bars in the accent color.
   - **Retro:** segmented LED bars on black, green → yellow → red, with light peak segments.
 - **Equalizer presets:**
@@ -37,22 +71,22 @@ A small macOS menu bar app that shows and controls what is playing in Spotify or
 - Switches automatically to whichever app starts playing.
 - No Dock icon; never launches the music app on its own.
 
-Requires macOS 13+ and Swift 5.10+.
+## Build from source
 
-## Build and install
+Requires Xcode command line tools (Swift 5.10+).
 
 ```bash
-./build.sh
+./build.sh                     # builds "eMusic Player.app"
 pkill -x eMusicPlayer; ditto "eMusic Player.app" "/Applications/eMusic Player.app"
 open "/Applications/eMusic Player.app"
 ```
 
-On first use macOS asks for permission to control Spotify / Music
-(System Settings › Privacy & Security › Automation).
+```bash
+./release.sh                   # universal app + dist/eMusicPlayer.dmg
+swift Tools/make-icon.swift    # regenerates the icon
+```
 
-## Screenshots
-
-The images in `docs/` are taken from the running app:
+The screenshots in `docs/` are taken from the running app:
 
 ```bash
 open -n "eMusic Player.app" --stdout /tmp/w.txt --args --preview panel   # also: settings, bar

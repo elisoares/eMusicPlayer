@@ -262,6 +262,29 @@ enum VisualizerStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// The played part of the title: a rectangle covering `progress` of the bounds from the
+/// leading edge or from the bottom. Animatable so the fill slides between readings.
+struct ProgressClip: Shape {
+    var progress: Double
+    let direction: FillDirection
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let fraction = CGFloat(min(1, max(0, progress)))
+        switch direction {
+        case .leftToRight:
+            return Path(CGRect(x: rect.minX, y: rect.minY, width: rect.width * fraction, height: rect.height))
+        case .bottomToTop:
+            let height = rect.height * fraction
+            return Path(CGRect(x: rect.minX, y: rect.maxY - height, width: rect.width, height: height))
+        }
+    }
+}
+
 enum FillDirection: String, CaseIterable, Identifiable {
     case leftToRight, bottomToTop
     var id: String { rawValue }
@@ -286,12 +309,7 @@ struct ProgressTitle: View {
                         .lineLimit(1)
                         .foregroundStyle(fill)
                         .frame(width: geo.size.width, height: geo.size.height, alignment: .leading)
-                        .mask(alignment: direction == .leftToRight ? .leading : .bottom) {
-                            switch direction {
-                            case .leftToRight: Rectangle().frame(width: geo.size.width * progress)
-                            case .bottomToTop: Rectangle().frame(height: geo.size.height * progress)
-                            }
-                        }
+                        .clipShape(ProgressClip(progress: progress, direction: direction))
                 }
             }
             // Position arrives once per second; slide between readings.
