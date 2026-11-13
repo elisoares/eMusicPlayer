@@ -19,7 +19,7 @@ enum EMusicPlayerMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let player = PlayerController()
     private var statusItem: NSStatusItem?
     private var barHost: NSHostingView<AnyView>?
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PlayerView(player: player))
+        popover.delegate = self
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let host = NSHostingView(rootView: AnyView(StatusBarView(player: player) { [weak self] in
@@ -61,8 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resizeStatusItem() {
         guard let item = statusItem, let host = barHost, let button = item.button else { return }
         let size = host.fittingSize
-        item.length = size.width
-        host.frame = NSRect(x: 0, y: (button.bounds.height - size.height) / 2, width: size.width, height: size.height)
+        let frame = NSRect(x: 0, y: (button.bounds.height - size.height) / 2, width: size.width, height: size.height)
+        if item.length != size.width { item.length = size.width }
+        if host.frame != frame { host.frame = frame }
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        popover.contentViewController = nil
     }
 
     private func togglePopover() {
@@ -70,8 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Built on open and dropped on close, so a hidden panel never redraws.
+            popover.contentViewController = NSHostingController(rootView: PlayerView(player: player))
             player.refresh()
-            player.loadEqualizer()
             // A transient popover closes at once if the app is not active (e.g. when reopened from Finder).
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -204,29 +210,27 @@ struct SpectrumBars: View {
     private func modern(levels: [Float], peaks: [Float]) -> some View {
         let count = equalizerBands.count
         return VStack(spacing: 3) {
-            GeometryReader { geo in
-                let slot = geo.size.width / CGFloat(count)
+            // One Canvas instead of a view per bar: far less layout work per frame.
+            Canvas { context, size in
+                let slot = size.width / CGFloat(count)
                 let barWidth = slot * (1 - spacingRatio)
                 let floor: CGFloat = 0.1
-                ZStack(alignment: .bottomLeading) {
-                    ForEach(0..<count, id: \.self) { index in
-                        let level = CGFloat(levels.isEmpty ? 0 : levels[index])
-                        let x = slot * CGFloat(index) + (slot - barWidth) / 2
-                        RoundedRectangle(cornerRadius: min(2, barWidth / 3))
-                            .fill(color.opacity(levels.isEmpty ? 0.45 : 0.55 + 0.45 * Double(level)))
-                            .frame(width: barWidth, height: max(2, geo.size.height * (floor + (1 - floor) * level)))
-                            .offset(x: x)
-                        if !peaks.isEmpty {
-                            let peak = CGFloat(peaks[index])
-                            let top = geo.size.height * (floor + (1 - floor) * peak)
-                            Rectangle()
-                                .fill(color)
-                                .frame(width: barWidth, height: peakThickness)
-                                .offset(x: x, y: -min(geo.size.height - peakThickness, top + peakThickness))
-                        }
+                let radius = min(2, barWidth / 3)
+                for index in 0..<count {
+                    let level = CGFloat(levels.isEmpty ? 0 : levels[index])
+                    let x = slot * CGFloat(index) + (slot - barWidth) / 2
+                    let height = max(2, size.height * (floor + (1 - floor) * level))
+                    let bar = CGRect(x: x, y: size.height - height, width: barWidth, height: height)
+                    context.fill(
+                        Path(roundedRect: bar, cornerRadius: radius),
+                        with: .color(color.opacity(levels.isEmpty ? 0.45 : 0.55 + 0.45 * Double(level)))
+                    )
+                    if !peaks.isEmpty {
+                        let top = size.height * (floor + (1 - floor) * CGFloat(peaks[index]))
+                        let y = max(0, size.height - top - peakThickness)
+                        context.fill(Path(CGRect(x: x, y: y, width: barWidth, height: peakThickness)), with: .color(color))
                     }
                 }
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomLeading)
             }
             if showsLabels {
                 HStack(spacing: 0) {
@@ -312,8 +316,8 @@ struct ProgressTitle: View {
                         .clipShape(ProgressClip(progress: progress, direction: direction))
                 }
             }
-            // Position arrives once per second; slide between readings.
-            .animation(.linear(duration: 1), value: progress)
+            // No animation: a 1 s linear slide redraws the menu bar item at display rate
+            // for the whole song. Stepping once per second is visually the same.
             .help("\(Int((progress * 100).rounded()))% da música")
     }
 }
@@ -509,11 +513,8 @@ struct PlayerView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Picker("", selection: $player.source) {
-                    ForEach(PlayerSource.allCases) { Text($0.displayName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                Text(Spotify.name).font(.headline)
+                Spacer()
                 Button { showSettings.toggle() } label: {
                     Image(systemName: showSettings ? "paintpalette.fill" : "paintpalette")
                         .foregroundStyle(accent.color)
@@ -548,7 +549,7 @@ struct PlayerView: View {
 
             Divider()
             HStack {
-                Button("Abrir \(player.source.displayName)") { player.openApp() }
+                Button("Abrir \(Spotify.name)") { player.openApp() }
                 Spacer()
                 Button("Sair") { NSApp.terminate(nil) }
             }
@@ -559,10 +560,7 @@ struct PlayerView: View {
         .padding(.top, Preview.mode == nil ? 0 : 10)
         .frame(width: 300)
         .tint(accent.color)
-        .onAppear {
-            player.refresh()
-            player.loadEqualizer()
-        }
+        .onAppear { player.refresh() }
     }
 
     // MARK: Settings
@@ -655,7 +653,7 @@ struct PlayerView: View {
             Image(systemName: "music.note.house")
                 .font(.system(size: 36))
                 .foregroundStyle(.secondary)
-            Text("\(player.source.displayName) não está aberto")
+            Text("\(Spotify.name) não está aberto")
                 .foregroundStyle(.secondary)
             Button("Abrir") { player.openApp() }
         }
@@ -764,29 +762,10 @@ struct PlayerView: View {
                 .frame(height: 70)
             SpectrumNote(spectrum: player.spectrum, isPlaying: player.state.isPlaying)
 
-            if player.equalizer.isAvailable {
-                HStack {
-                    Toggle("Ativo", isOn: Binding(
-                        get: { player.equalizer.isEnabled },
-                        set: { player.setEqualizerEnabled($0) }
-                    ))
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    Picker("", selection: Binding(
-                        get: { player.equalizer.preset },
-                        set: { player.setEqualizerPreset($0) }
-                    )) {
-                        ForEach(player.equalizer.presets, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                    .disabled(!player.equalizer.isEnabled)
-                }
-            } else if player.source == .spotify {
-                Text("Para mudar o som, use Spotify › Ajustes › Reprodução › Equalizador.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text("Para mudar o som, use Spotify › Ajustes › Reprodução › Equalizador.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(10)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))

@@ -5,7 +5,7 @@
 <h1 align="center">eMusic Player</h1>
 
 <p align="center">
-  A small macOS menu bar app that shows and controls what is playing in Spotify or Apple Music,<br>
+  A small macOS menu bar app that shows and controls what is playing in Spotify,<br>
   with a live equalizer that follows the music.
 </p>
 
@@ -43,9 +43,9 @@
    ```
 
 3. On first use macOS asks for two permissions:
-   - **Automation** for Spotify / Music, to read the current song and control playback.
+   - **Automation** for Spotify, to read the current song and control playback.
    - **Screen & System Audio Recording**, so the equalizer can follow the music. Only the
-     music app's audio is analyzed; nothing is recorded or saved.
+     Spotify audio is analyzed; nothing is recorded or saved.
 
 Requires macOS 13 or newer (the live equalizer needs macOS 14.2). Runs on Apple silicon and Intel.
 
@@ -58,18 +58,17 @@ Requires macOS 13 or newer (the live equalizer needs macOS 14.2). Runs on Apple 
 - **Panel:** album artwork, title, artist and album, seek bar with times, shuffle,
   playback buttons, volume and the equalizer.
 - **Live equalizer:** the 10 standard bands (31 Hz – 16 kHz) of the music, each with a
-  falling peak marker. eMusic Player taps only the audio of the selected app
+  falling peak marker. eMusic Player taps only the audio of Spotify
   (Core Audio process tap) and runs an FFT on it.
 - **Appearance** (palette button at the top of the panel): accent color, button color,
   button style (Classic, Filled, Outline, Soft, Minimal) and equalizer style:
   - **Modern:** rounded bars in the accent color.
   - **Retro:** segmented LED bars on black, green → yellow → red, with light peak segments.
-- **Equalizer presets:**
-  - Apple Music: turn the equalizer on/off and pick a preset (Rock, Jazz, Bass Booster…).
-  - Spotify does not let other apps change its equalizer; the panel points to
-    Spotify › Settings › Playback › Equalizer instead.
-- Switches automatically to whichever app starts playing.
-- No Dock icon; never launches the music app on its own.
+- **Sound equalizer:** Spotify does not let other apps change its equalizer; the panel
+  points to Spotify › Settings › Playback › Equalizer instead.
+- Light on resources: the equalizer runs at 15 fps and only while music plays; paused,
+  the app stays near 0% CPU.
+- No Dock icon; never launches Spotify on its own.
 
 ## Build from source
 

@@ -11,35 +11,46 @@ let equalizerBandLabels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8
 /// (macOS 14.2+, "System Audio Recording" permission). Empty `levels` means no live audio.
 @MainActor
 final class AudioSpectrum: ObservableObject {
-    @Published private(set) var levels: [Float] = []
-    /// Peak-hold marker per band: jumps up with the level, holds briefly, then falls.
-    @Published private(set) var peaks: [Float] = []
+    /// Levels and peak-hold markers of one frame, published together (one redraw per frame).
+    struct Frame: Equatable {
+        var levels: [Float] = []
+        /// Peak-hold marker per band: jumps up with the level, holds briefly, then falls.
+        var peaks: [Float] = []
+    }
+
+    /// Analysis frames per second. Every frame redraws the menu bar item, which macOS
+    /// snapshots and recomposites in WindowServer, so this is the main CPU/GPU cost.
+    static let framesPerSecond = 15.0
+    /// Values are rounded to this many steps; frames that round the same are not published.
+    private static let steps: Float = 48
+
+    @Published private(set) var frame = Frame()
     private var peakHold: [Int] = []
     /// True while capturing but only receiving digital silence (usually: permission denied).
     @Published private(set) var isSilent = false
     @Published private(set) var failure: String?
 
+    var levels: [Float] { frame.levels }
+    var peaks: [Float] { frame.peaks }
+
     private var capture: AnyObject?
-    private var target: PlayerSource?
     private var lastAttempt = Date.distantPast
     private var silentFrames = 0
 
-    func sync(source: PlayerSource, isPlaying: Bool) {
+    func sync(isPlaying: Bool) {
         guard isPlaying else { stop(); return }
         guard #available(macOS 14.2, *) else {
-            failure = "Requer macOS 14.2 ou mais novo."
+            if failure == nil { failure = "Requer macOS 14.2 ou mais novo." }
             return
         }
-        if capture != nil, target == source { return }
-        stop()
+        if capture != nil { return }
         // Spotify registers its audio process a moment after playback starts; retry gently.
         guard Date().timeIntervalSince(lastAttempt) > 2 else { return }
         lastAttempt = Date()
         do {
-            capture = try TapCapture(bundlePrefix: source.bundleID) { [weak self] bands in
+            capture = try TapCapture(bundlePrefix: Spotify.bundleID, framesPerSecond: Self.framesPerSecond) { [weak self] bands in
                 DispatchQueue.main.async { self?.receive(bands) }
             }
-            target = source
             failure = nil
         } catch {
             failure = (error as? TapError)?.message ?? error.localizedDescription
@@ -49,40 +60,45 @@ final class AudioSpectrum: ObservableObject {
     func stop() {
         if #available(macOS 14.2, *) { (capture as? TapCapture)?.stop() }
         capture = nil
-        target = nil
-        levels = []
-        peaks = []
         peakHold = []
-        isSilent = false
         silentFrames = 0
+        if frame != Frame() { frame = Frame() }
+        if isSilent { isSilent = false }
     }
 
-    private func receive(_ bands: [Float]) {
+    private func receive(_ raw: [Float]) {
         guard capture != nil else { return }
-        if bands.allSatisfy({ $0 == 0 }) {
+        let silent: Bool
+        if raw.allSatisfy({ $0 == 0 }) {
             silentFrames += 1
-            isSilent = silentFrames > 90
+            silent = silentFrames > Int(3 * Self.framesPerSecond)
         } else {
             silentFrames = 0
-            isSilent = false
+            silent = false
         }
+        if silent != isSilent { isSilent = silent }
+
+        let bands = raw.map { ($0 * Self.steps).rounded() / Self.steps }
+        var peaks = frame.peaks
         if peaks.count != bands.count {
             peaks = bands
             peakHold = Array(repeating: 0, count: bands.count)
         }
-        var nextPeaks = peaks
+        let holdFrames = Int(0.6 * Self.framesPerSecond)
+        let fall = Float(0.45 / Self.framesPerSecond)
         for index in bands.indices {
-            if bands[index] >= nextPeaks[index] {
-                nextPeaks[index] = bands[index]
-                peakHold[index] = 18 // ~0.6 s at 30 fps
+            if bands[index] >= peaks[index] {
+                peaks[index] = bands[index]
+                peakHold[index] = holdFrames
             } else if peakHold[index] > 0 {
                 peakHold[index] -= 1
             } else {
-                nextPeaks[index] = max(bands[index], nextPeaks[index] - 0.015)
+                let falling = max(bands[index], peaks[index] - fall)
+                peaks[index] = (falling * Self.steps).rounded(.down) / Self.steps
             }
         }
-        levels = bands
-        peaks = nextPeaks
+        let next = Frame(levels: bands, peaks: peaks)
+        if next != frame { frame = next }
     }
 }
 
@@ -102,7 +118,7 @@ final class TapCapture {
     private var analyzer: SpectrumAnalyzer?
     private let queue = DispatchQueue(label: "eMusicPlayer.tap", qos: .userInteractive)
 
-    init(bundlePrefix: String, onBands: @escaping ([Float]) -> Void) throws {
+    init(bundlePrefix: String, framesPerSecond: Double, onBands: @escaping ([Float]) -> Void) throws {
         let processes = try Self.audioProcesses(bundlePrefix: bundlePrefix)
         guard !processes.isEmpty else { throw TapError(message: "O app de música ainda não está tocando áudio.") }
 
@@ -138,7 +154,7 @@ final class TapCapture {
             status = AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID)
             guard status == noErr else { throw TapError.os("criar o dispositivo de captura", status) }
 
-            let analyzer = SpectrumAnalyzer(sampleRate: format.mSampleRate, centers: equalizerBands)
+            let analyzer = SpectrumAnalyzer(sampleRate: format.mSampleRate, framesPerSecond: framesPerSecond, centers: equalizerBands)
             self.analyzer = analyzer
             let interleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
             let channels = max(1, Int(format.mChannelsPerFrame))
@@ -234,8 +250,8 @@ final class SpectrumAnalyzer {
     private var smoothed: [Float]
     private var peakDB: Float = -40
 
-    init(sampleRate: Double, centers: [Double]) {
-        hop = min(size, max(512, Int(sampleRate / 30)))
+    init(sampleRate: Double, framesPerSecond: Double, centers: [Double]) {
+        hop = min(size, max(512, Int(sampleRate / framesPerSecond)))
         fft = vDSP.FFT(log2n: 12, radix: .radix2, ofType: DSPSplitComplex.self)!
         window = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: size, isHalfWindow: false)
         smoothed = [Float](repeating: 0, count: centers.count)
