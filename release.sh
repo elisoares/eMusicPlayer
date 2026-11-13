@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 ./build.sh --universal
 rm -rf dist
 mkdir -p dist/dmg
-ditto "eMusic Player.app" "dist/dmg/eMusic Player.app"
+ditto "build.noindex/eMusic Player.app" "dist/dmg/eMusic Player.app"
 ln -s /Applications dist/dmg/Applications
 hdiutil create -quiet -volname "eMusic Player" -srcfolder dist/dmg -ov -format UDZO dist/eMusicPlayer.dmg
 rm -rf dist/dmg

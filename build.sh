@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Builds "eMusic Player.app" (menu bar only, no Dock icon) next to this script.
+# Builds "build.noindex/eMusic Player.app" (menu bar only, no Dock icon). The .noindex
+# folder keeps Spotlight from listing this build copy next to the installed app.
 # --universal builds for Apple silicon and Intel (used by release.sh).
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -12,7 +13,7 @@ else
   swift build -c release
   BINARY=".build/release/eMusicPlayer"
 fi
-APP="eMusic Player.app"
+APP="build.noindex/eMusic Player.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"  # regenerate: swift Tools/make-icon.swift
@@ -34,9 +35,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSAudioCaptureUsageDescription</key>
-    <string>O eMusic Player escuta o áudio do Spotify ou do Apple Music para desenhar o equalizador conforme a música.</string>
+    <string>O eMusic Player escuta o áudio do Spotify para desenhar o equalizador conforme a música.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>O eMusic Player controla o Spotify e o Apple Music para mostrar a faixa atual e tocar, pausar e pular músicas.</string>
+    <string>O eMusic Player controla o Spotify para mostrar a faixa atual e tocar, pausar e pular músicas.</string>
 </dict>
 </plist>
 PLIST

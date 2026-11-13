@@ -83,8 +83,8 @@ Requires macOS 13 or newer (the live equalizer needs macOS 14.2). Runs on Apple 
 Requires Xcode command line tools (Swift 5.10+).
 
 ```bash
-./build.sh                     # builds "eMusic Player.app"
-pkill -x eMusicPlayer; ditto "eMusic Player.app" "/Applications/eMusic Player.app"
+./build.sh                     # builds "build.noindex/eMusic Player.app"
+pkill -x eMusicPlayer; ditto "build.noindex/eMusic Player.app" "/Applications/eMusic Player.app"
 open "/Applications/eMusic Player.app"
 ```
 
@@ -96,7 +96,7 @@ swift Tools/make-icon.swift    # regenerates the icon
 The screenshots in `docs/` are taken from the running app:
 
 ```bash
-open -n "eMusic Player.app" --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
+open -n "build.noindex/eMusic Player.app" --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
 # /tmp/w.txt gets "WINDOW <id>"; then:
 screencapture -x -o -l <id> docs/screenshots/v1.1b/panel.png
 ```
