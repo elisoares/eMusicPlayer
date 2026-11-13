@@ -6,7 +6,8 @@ cd "$(dirname "$0")"
 swift build -c release
 APP="eMusic Player.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"  # regenerate: swift Tools/make-icon.swift
 cp ".build/release/eMusicPlayer" "$APP/Contents/MacOS/eMusicPlayer"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
@@ -18,6 +19,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key><string>local.emusicplayer</string>
     <key>CFBundleName</key><string>eMusic Player</string>
     <key>CFBundleDisplayName</key><string>eMusic Player</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1</string>

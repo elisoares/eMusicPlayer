@@ -1,5 +1,7 @@
 # eMusic Player
 
+<img src="docs/icon.png" width="128" alt="eMusic Player icon">
+
 A small macOS menu bar app that shows and controls what is playing in Spotify or Apple Music.
 
 ![Menu bar](docs/bar.png)
