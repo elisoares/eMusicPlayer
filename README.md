@@ -60,8 +60,12 @@ Requires macOS 13 or newer (the live equalizer needs macOS 14.2). Runs on Apple 
 - **Live equalizer:** the 10 standard bands (31 Hz – 16 kHz) of the music, each with a
   falling peak marker. eMusic Player taps only the audio of Spotify
   (Core Audio process tap) and runs an FFT on it.
+- **Floating player:** the pin button (or dragging the panel away from the menu bar)
+  detaches it into a small window that stays above other apps on every desktop. The pin
+  puts it back; the app remembers which one you used.
 - **Appearance** (palette button at the top of the panel): accent color, button color,
-  button style (Classic, Filled, Outline, Soft, Minimal) and equalizer style:
+  player style (Standard, Compact, Retro LCD), button style for the player and for the
+  menu bar (Classic, Filled, Outline, Soft, Minimal) and equalizer style:
   - **Modern:** rounded bars in the accent color.
   - **Retro:** segmented LED bars on black, green → yellow → red, with light peak segments.
 - **Sound equalizer:** Spotify does not let other apps change its equalizer; the panel

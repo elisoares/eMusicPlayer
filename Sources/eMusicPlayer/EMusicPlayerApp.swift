@@ -19,12 +19,16 @@ enum EMusicPlayerMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private let player = PlayerController()
     private var statusItem: NSStatusItem?
     private var barHost: NSHostingView<AnyView>?
     private let popover = NSPopover()
+    /// The player detached from the menu bar: a floating window that stays above other apps.
+    private var panel: NSPanel?
     private var cancellables: Set<AnyCancellable> = []
+
+    private static let detachedKey = "panelDetached"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let mode = Preview.mode {
@@ -34,9 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         popover.behavior = .transient
         popover.delegate = self
+        // Built once: a hosting view outside a window does not render, so a closed panel costs nothing.
+        popover.contentViewController = NSHostingController(rootView: PlayerView(player: player) { [weak self] in
+            self?.detach()
+        })
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        let host = NSHostingView(rootView: AnyView(StatusBarView(player: player) { [weak self] in
+        let host = FirstClickHostingView(rootView: AnyView(StatusBarView(player: player) { [weak self] in
             self?.togglePopover()
         }))
         item.button?.addSubview(host)
@@ -50,11 +58,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.resizeStatusItem() }
             .store(in: &cancellables)
+
+        if UserDefaults.standard.bool(forKey: Self.detachedKey) { detach() }
     }
 
-    /// Opening the app again (Finder, Spotlight, Launchpad) shows the player panel.
+    /// Opening the app again (Finder, Spotlight, Launchpad) shows the player.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if statusItem != nil, !popover.isShown { togglePopover() }
+        guard statusItem != nil else { return false }
+        if let panel, panel.isVisible {
+            panel.orderFrontRegardless()
+        } else if !popover.isShown {
+            // Launched from Finder the app is active, so the transient popover stays open.
+            NSApp.activate(ignoringOtherApps: true)
+            togglePopover()
+        }
         return false
     }
 
@@ -66,24 +83,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if host.frame != frame { host.frame = frame }
     }
 
-    func popoverDidClose(_ notification: Notification) {
-        popover.contentViewController = nil
-    }
-
     private func togglePopover() {
+        if let panel, panel.isVisible {
+            panel.orderFrontRegardless()
+            return
+        }
         guard let button = statusItem?.button else { return }
         if popover.isShown {
             popover.performClose(nil)
-        } else {
-            // Built on open and dropped on close, so a hidden panel never redraws.
-            popover.contentViewController = NSHostingController(rootView: PlayerView(player: player))
-            player.refresh()
-            // A transient popover closes at once if the app is not active (e.g. when reopened from Finder).
-            NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            return
         }
+        // No NSApp.activate here: activation lands after the popover opens and closes the
+        // transient popover, which is why it used to take a second click.
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+        // Read Spotify after the panel is on screen, not before.
+        DispatchQueue.main.async { [weak self] in self?.player.refresh() }
     }
+
+    // MARK: Detached player
+
+    func popoverShouldDetach(_ popover: NSPopover) -> Bool { true }
+
+    /// Dragging the popover away from the menu bar turns it into the floating player.
+    func detachableWindow(for popover: NSPopover) -> NSWindow? {
+        UserDefaults.standard.set(true, forKey: Self.detachedKey)
+        return makePanel()
+    }
+
+    private func detach() {
+        popover.performClose(nil)
+        UserDefaults.standard.set(true, forKey: Self.detachedKey)
+        makePanel().orderFrontRegardless()
+    }
+
+    private func makePanel() -> NSPanel {
+        if let panel { return panel }
+        let host = NSHostingController(rootView: PlayerView(player: player, isDetached: true) { [weak self] in
+            self?.panel?.close()
+        })
+        host.sizingOptions = [.intrinsicContentSize, .preferredContentSize]
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel, .utilityWindow],
+            backing: .buffered, defer: true
+        )
+        panel.contentViewController = host
+        panel.title = "eMusic Player"
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isMovableByWindowBackground = true
+        panel.isReleasedWhenClosed = false
+        panel.delegate = self
+        if !panel.setFrameUsingName("PlayerPanel") { panel.center() }
+        panel.setFrameAutosaveName("PlayerPanel")
+        self.panel = panel
+        return panel
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard (notification.object as? NSPanel) === panel else { return }
+        UserDefaults.standard.set(false, forKey: Self.detachedKey)
+    }
+}
+
+/// Status bar host that acts on the first click even while another app is active.
+final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 // MARK: - Appearance options
@@ -152,9 +222,11 @@ struct ControlIcon: View {
     let color: Color
     let diameter: CGFloat
     var prominent = false
+    /// Glyph size relative to the diameter; the menu bar uses a larger glyph in a small circle.
+    var glyphRatio: CGFloat = 0.4
 
     var body: some View {
-        let glyph = Image(systemName: symbol).font(.system(size: diameter * 0.4, weight: .semibold))
+        let glyph = Image(systemName: symbol).font(.system(size: diameter * glyphRatio, weight: .semibold))
         switch style {
         case .classic:
             if prominent {
@@ -178,9 +250,22 @@ struct ControlIcon: View {
                 .background(Circle().fill(color.opacity(0.18)))
         case .minimal:
             Image(systemName: symbol)
-                .font(.system(size: diameter * (prominent ? 0.6 : 0.45)))
+                .font(.system(size: diameter * (prominent ? 0.6 : glyphRatio + 0.05)))
                 .foregroundStyle(color)
                 .frame(width: diameter, height: diameter)
+        }
+    }
+}
+
+/// Layout of the song area in the player.
+enum PlayerLook: String, CaseIterable, Identifiable {
+    case standard, compact, lcd
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .standard: "Padrão"
+        case .compact: "Compacto"
+        case .lcd: "LCD retrô"
         }
     }
 }
@@ -417,6 +502,7 @@ struct StatusBarView: View {
     @AppStorage("barTitleFill") private var fillDirection = FillDirection.leftToRight
     @AppStorage("timeColor") private var timeColor = Accent.standard
     @AppStorage("visualizerStyle") private var visualizerStyle = VisualizerStyle.modern
+    @AppStorage("barButtonStyle") private var barButtonStyle = ControlStyle.classic
 
     private var progress: Double {
         guard player.state.duration > 0 else { return 0 }
@@ -471,10 +557,8 @@ struct StatusBarView: View {
     }
 
     private func barIcon(_ symbol: String) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 11))
-            .foregroundStyle(buttonColor.color)
-            .frame(width: 18, height: 18)
+        ControlIcon(symbol: symbol, style: barButtonStyle, color: buttonColor.color, diameter: 18, glyphRatio: 0.55)
+            .frame(width: 19, height: 18)
     }
 
     private var hasTrack: Bool { player.isAppRunning && !player.state.title.isEmpty }
@@ -503,11 +587,19 @@ struct PlayerView: View {
     @AppStorage("barShowTitle") private var showTitle = true
     @AppStorage("barShowTime") private var showTime = true
     @AppStorage("barShowControls") private var showControls = true
+    @AppStorage("barButtonStyle") private var barButtonStyle = ControlStyle.classic
+    @AppStorage("playerLook") private var look = PlayerLook.standard
     @State private var showSettings: Bool
+    /// True in the floating window; false in the menu bar popover.
+    let isDetached: Bool
+    /// Detaches the popover, or puts the floating window back in the menu bar.
+    let onTogglePin: (() -> Void)?
 
-    init(player: PlayerController, showSettings: Bool = false) {
+    init(player: PlayerController, showSettings: Bool = false, isDetached: Bool = false, onTogglePin: (() -> Void)? = nil) {
         self.player = player
         _showSettings = State(initialValue: showSettings)
+        self.isDetached = isDetached
+        self.onTogglePin = onTogglePin
     }
 
     var body: some View {
@@ -515,6 +607,14 @@ struct PlayerView: View {
             HStack {
                 Text(Spotify.name).font(.headline)
                 Spacer()
+                if let onTogglePin {
+                    Button(action: onTogglePin) {
+                        Image(systemName: isDetached ? "pin.fill" : "pin")
+                            .foregroundStyle(accent.color)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(isDetached ? "Voltar para a barra de menus" : "Destacar: janela sempre visível acima dos outros apps")
+                }
                 Button { showSettings.toggle() } label: {
                     Image(systemName: showSettings ? "paintpalette.fill" : "paintpalette")
                         .foregroundStyle(accent.color)
@@ -557,10 +657,9 @@ struct PlayerView: View {
             .font(.callout)
         }
         .padding(14)
-        .padding(.top, Preview.mode == nil ? 0 : 10)
+        .padding(.top, Preview.mode != nil || isDetached ? 14 : 0)
         .frame(width: 300)
         .tint(accent.color)
-        .onAppear { player.refresh() }
     }
 
     // MARK: Settings
@@ -573,23 +672,18 @@ struct PlayerView: View {
             Text("Cor dos botões").font(.caption).foregroundStyle(.secondary)
             swatches(Accent.allCases, selection: $buttonColor)
 
-            Text("Estilo dos botões").font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 6) {
-                ForEach(ControlStyle.allCases) { style in
-                    VStack(spacing: 3) {
-                        ControlIcon(symbol: "play.fill", style: style, color: buttonTint, diameter: 26, prominent: true)
-                            .frame(width: 34, height: 30)
-                        Text(style.label).font(.system(size: 9))
-                    }
-                    .padding(4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(style == buttonStyle ? accent.color : .clear, lineWidth: 1.5)
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture { buttonStyle = style }
-                }
+            Text("Estilo do player").font(.caption).foregroundStyle(.secondary)
+            Picker("", selection: $look) {
+                ForEach(PlayerLook.allCases) { Text($0.label).tag($0) }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            Text("Botões do player").font(.caption).foregroundStyle(.secondary)
+            styleChooser(selection: $buttonStyle)
+
+            Text("Botões da barra de menus").font(.caption).foregroundStyle(.secondary)
+            styleChooser(selection: $barButtonStyle)
 
             Text("Estilo do equalizador").font(.caption).foregroundStyle(.secondary)
             Picker("", selection: $visualizerStyle) {
@@ -620,6 +714,25 @@ struct PlayerView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func styleChooser(selection: Binding<ControlStyle>) -> some View {
+        HStack(spacing: 6) {
+            ForEach(ControlStyle.allCases) { style in
+                VStack(spacing: 3) {
+                    ControlIcon(symbol: "play.fill", style: style, color: buttonTint, diameter: 26, prominent: true)
+                        .frame(width: 34, height: 30)
+                    Text(style.label).font(.system(size: 9))
+                }
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(style == selection.wrappedValue ? accent.color : .clear, lineWidth: 1.5)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { selection.wrappedValue = style }
+            }
+        }
     }
 
     private func swatches(_ options: [Accent], selection: Binding<Accent>) -> some View {
@@ -660,29 +773,74 @@ struct PlayerView: View {
         .frame(maxWidth: .infinity, minHeight: 140)
     }
 
+    @ViewBuilder
     private var nowPlaying: some View {
-        VStack(spacing: 8) {
-            Group {
-                if let art = player.artwork {
-                    Image(nsImage: art).resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    ZStack {
-                        accent.color.opacity(0.2)
-                        Image(systemName: "music.note").font(.system(size: 48)).foregroundStyle(accent.color)
+        switch look {
+        case .standard:
+            VStack(spacing: 8) {
+                artworkView(size: 272, radius: 10)
+                VStack(spacing: 2) {
+                    Text(player.state.title).font(.headline).lineLimit(1)
+                    Text(player.state.artist).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    if !player.state.album.isEmpty {
+                        Text(player.state.album).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                     }
                 }
             }
-            .frame(width: 272, height: 272)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+        case .compact:
+            HStack(spacing: 10) {
+                artworkView(size: 64, radius: 6)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(player.state.title).font(.headline).lineLimit(1)
+                    Text(player.state.artist).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    if !player.state.album.isEmpty {
+                        Text(player.state.album).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        case .lcd:
+            HStack(spacing: 10) {
+                artworkView(size: 58, radius: 4)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(player.state.title.uppercased())
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                    Text(player.state.artist.uppercased())
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .opacity(0.7)
+                        .lineLimit(1)
+                    Text(formatTime(player.scrubPosition ?? player.state.position))
+                        .font(.system(size: 22, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(lcdColor)
+                .shadow(color: lcdColor.opacity(0.6), radius: 3)
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(Color.black, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.gray.opacity(0.5), lineWidth: 1))
+        }
+    }
 
-            VStack(spacing: 2) {
-                Text(player.state.title).font(.headline).lineLimit(1)
-                Text(player.state.artist).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                if !player.state.album.isEmpty {
-                    Text(player.state.album).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+    /// LCD text: the accent color, or classic LED green when the accent is not set.
+    private var lcdColor: Color {
+        accent == .standard ? Color(red: 0.25, green: 1, blue: 0.4) : accent.color
+    }
+
+    private func artworkView(size: CGFloat, radius: CGFloat) -> some View {
+        Group {
+            if let art = player.artwork {
+                Image(nsImage: art).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    accent.color.opacity(0.2)
+                    Image(systemName: "music.note").font(.system(size: size * 0.18)).foregroundStyle(accent.color)
                 }
             }
         }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: radius))
     }
 
     private var progress: some View {
