@@ -16,17 +16,17 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/v1.1/bar.png" width="360" alt="Menu bar, modern style"><br>
-  <img src="docs/screenshots/v1.1/retro-bar.png" width="360" alt="Menu bar, retro style"><br>
+  <img src="docs/screenshots/v1.1b/bar.png" width="360" alt="Menu bar, modern style"><br>
+  <img src="docs/screenshots/v1.1b/retro-bar.png" width="360" alt="Menu bar, retro style"><br>
   <sub>Menu bar: live equalizer, song title that fills up as the song plays, time and controls (Modern and Retro styles)</sub>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/v1.1/panel.png" width="250" alt="Player panel, modern style">
+  <img src="docs/screenshots/v1.1b/panel.png" width="250" alt="Player panel, modern style">
   &nbsp;
-  <img src="docs/screenshots/v1.1/retro-panel.png" width="250" alt="Player panel with the retro LED equalizer">
+  <img src="docs/screenshots/v1.1b/retro-panel.png" width="250" alt="Player panel with the retro LED equalizer">
   &nbsp;
-  <img src="docs/screenshots/v1.1/settings.png" width="250" alt="Color, button and equalizer settings"><br>
+  <img src="docs/screenshots/v1.1b/settings.png" width="250" alt="Color, button and equalizer settings"><br>
   <sub>Panel (click the title in the menu bar): Standard · Retro LCD · Settings</sub>
 </p>
 
@@ -98,5 +98,5 @@ The screenshots in `docs/` are taken from the running app:
 ```bash
 open -n "eMusic Player.app" --stdout /tmp/w.txt --args --preview panel   # also: settings, bar
 # /tmp/w.txt gets "WINDOW <id>"; then:
-screencapture -x -o -l <id> docs/screenshots/v1.1/panel.png
+screencapture -x -o -l <id> docs/screenshots/v1.1b/panel.png
 ```
