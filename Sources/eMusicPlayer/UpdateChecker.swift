@@ -73,6 +73,16 @@ struct UpdateButton: View {
     @ObservedObject var checker: UpdateChecker
 
     var body: some View {
+        HStack(spacing: 6) {
+            Text("v\(UpdateChecker.currentVersion)")
+                .foregroundStyle(.secondary)
+                .help("Versão instalada do eMusic Player")
+            action
+        }
+    }
+
+    @ViewBuilder
+    private var action: some View {
         switch checker.status {
         case .idle:
             Button("Atualizações") { checker.check() }
